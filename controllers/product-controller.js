@@ -137,7 +137,7 @@ exports.getAllProducts = async (req, res) => {
 
     // Filter by title (e.g., partial match)
     if (title) {
-      filter.title = { $regex: title, $options: 'i' }; // Case-insensitive match
+      filter['title.en'] = { $regex: new RegExp(title, 'i') }
     }
 
     // Filter by price (range)
@@ -147,6 +147,9 @@ exports.getAllProducts = async (req, res) => {
         filter.price = { $gte: minPrice, $lte: maxPrice };
       }
     }
+
+    console.log(filter);
+    
 
     // Get filtered products with pagination
     const products = await Product.find(filter).populate({
@@ -256,6 +259,9 @@ exports.getProductByIdFront = async (req, res) => {
       select: 'title attributes _id', // Include only the 'name' and '_id' fields from brand
     });
     if (!product) return res.status(404).json({ message: 'Product not found' });
+
+
+    let attributeData = await getProductWithAttributeDetails(product);
     // Get filtered products with pagination
     const similarProducts = await Product.find()
       .skip(0)
@@ -265,7 +271,7 @@ exports.getProductByIdFront = async (req, res) => {
       .skip(0)
       .limit(10);
       
-    res.status(200).json({product:product,similarProducts:similarProducts,bestProducts:bestProducts});
+    res.status(200).json({product:product,attributeData:attributeData,similarProducts:similarProducts,bestProducts:bestProducts});
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -395,28 +401,38 @@ exports.addVariantProduct = async (req, res) => {
     const primaryVariants = data?.filter((item) => item.primary === true);
     const subAttributes = data?.filter((item) => item.primary === false);
 
+    // Add primary variants to the product
+    primaryVariants.forEach((variant) => {
+      const newVariant = {
+        originalPrice: product.originalPrice || 0,
+        price: product.price || 0,
+        quantity: product.quantity || 0,
+        discount: product.discount || 0,
+        productId: productId,
+        barcode: product.barcode || '',
+        sku: product.sku || '',
+        image: variant.image || '',
+        attributeName: variant.name || '',
+        attributeValue: variant.value || '',
+        attributeImage: variant.image || '',
+        attributeType: variant.type || '',
+        subAttributes: [], // Initialize with an empty array
+      };
+
+      // Add the new variant to the product's variants array
+      product.variants.push(newVariant);
+    });
+
+    // Add all non-primary objects to the subAttributes array of every primary variant
     subAttributes.forEach((subAttr) => {
-      primaryVariants.forEach((variant) => {
-        const newVariant = {
-          originalPrice: product.originalPrice || 0,
-          price: product.price || 0,
-          quantity: product.stock || 0,
-          discount: product.discount || 0,
-          productId: productId,
-          barcode: product.barcode || '',
-          sku: product.sku || '',
-          image: variant.image || '',
-          attributeName: variant.name || '',
-          attributeValue: variant.value || '',
-          attributeImage: variant.image || '',
-          attributeType: variant.type || '',
-          subAttribute: subAttr.value || '', 
-          subAttributeType:subAttr.type || '',
-        };
-        product.variants.push(newVariant);
+      product.variants.forEach((variant) => {
+        variant.subAttributes.push({
+          type: subAttr.type || '',
+          name: subAttr.name || '',
+          value: subAttr.value || '',
+          image: subAttr.image || '',
+        });
       });
-      
-     
     });
 
     // Save the updated product
@@ -432,72 +448,6 @@ exports.addVariantProduct = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
-exports.updateVariant = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const updatedData = req.body;
-
-    // Find product by ID
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-    product.variants = updatedData || product.variants;
-   
-    // Save the updated product
-    await product.save();
-    product.variants =  product.variants?.map((i)=>{
-      if(i.quantity>0){
-        i.preOrder= false;
-        i.preOrderPrice = 0;
-        i.preOrderDate = null;
-      }
-      return i
-    })
-    await product.save();
-    res.status(200).json({
-      message: 'Variant updated successfully',
-      success: true,
-      product,
-    });
-  } catch (error) {
-    console.error('Error updating variant:', error);
-    res.status(500).json({ message: 'Server error', error });
-  }
-};
-exports.deleteVariant = async (req, res) => {
-  try {
-    const { productId, variantId } = req.params;
-
-    // Find the product by ID
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
-    // Find the variant by ID
-    const variant = product.variants.id(variantId);
-    if (!variant) {
-      return res.status(404).json({ message: 'Variant not found' });
-    }
-
-    // Remove the variant using Mongoose pull method
-    product.variants.pull({ _id: variantId });
-
-    // Save the updated product
-    await product.save();
-
-    res.status(200).json({
-      message: 'Variant deleted successfully',
-      success: true,
-      product,
-    });
-  } catch (error) {
-    console.error('Error deleting variant:', error);
-    res.status(500).json({ message: 'Server error', error });
-  }
-};
-
 
 
 

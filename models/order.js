@@ -10,17 +10,13 @@ const OrderSchema = new mongoose.Schema({
   products: [
     {
       productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-      variantId: { type: mongoose.Schema.Types.ObjectId, },
-      image:{type:String},
-      title:{type:String},
       quantity: { type: Number, required: true },
       price: { type: Number, required: true },  // Store price at the time of order
     },
   ],
   discountPrice: { type: Number, required: false, default: '0' },
   totalPrice: { type: Number, required: true },
-  status: { type: String, enum: ['preOrder','pending', 'shipped', 'completed', 'cancelled'], default: 'pending' },
-  remainingAmount:{type:Number,default:0},
+  status: { type: String, enum: ['pending', 'completed', 'cancelled'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },
 });
 
