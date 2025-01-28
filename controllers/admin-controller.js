@@ -39,7 +39,7 @@ const registerAdmin = async (req, res) => {
 };
 
 const loginAdmin = async (req, res) => {
-  console.log(req.body,"ddddddddddddddddddddddddddd");
+  console.log(req.body, "ddddddddddddddddddddddddddd");
   try {
     const admin = await Admin.findOne({ email: req.body.email });
     if (admin && bcrypt.compareSync(req.body.password, admin.password)) {
@@ -129,7 +129,7 @@ const addStaff = async (req, res) => {
       });
     } else {
       const newStaff = new Admin({
-        name: { ...req.body.name },
+        name: req.body.name,
         email: req.body.email,
         password: bcrypt.hashSync(req.body.password),
         phone: req.body.phone,
@@ -153,7 +153,7 @@ const addStaff = async (req, res) => {
 const getAllStaff = async (req, res) => {
   // console.log('allamdin')
   try {
-    const admins = await Admin.find({}).sort({ _id: -1 });
+    const admins = await Admin.find({}).populate("role").sort({ _id: -1 });
     res.send(admins);
   } catch (err) {
     res.status(500).send({
@@ -164,7 +164,7 @@ const getAllStaff = async (req, res) => {
 
 const getStaffById = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.params.id);
+    const admin = await Admin.findById(req.params.id).populate("role");
     res.send(admin);
   } catch (err) {
     res.status(500).send({
@@ -178,7 +178,7 @@ const updateStaff = async (req, res) => {
     const admin = await Admin.findOne({ _id: req.params.id });
 
     if (admin) {
-      admin.name = { ...admin.name, ...req.body.name };
+      admin.name = req.body.name;
       admin.email = req.body.email;
       admin.phone = req.body.phone;
       admin.role = req.body.role;
@@ -212,18 +212,27 @@ const updateStaff = async (req, res) => {
   }
 };
 
-const deleteStaff = (req, res) => {
-  Admin.deleteOne({ _id: req.params.id }, (err) => {
-    if (err) {
-      res.status(500).send({
-        message: err.message,
+const deleteStaff =async (req, res) => {
+  try {
+    console.log(req.params.id);
+    
+    const admin = await Admin.findByIdAndDelete(req.params.id);
+    
+    if (admin) {
+
+      res.send({
+        message: "Staff Deleted Successfully!",
       });
     } else {
-      res.status(200).send({
-        message: "Admin Deleted Successfully!",
+      res.status(404).send({
+        message: "This Staff not found!",
       });
     }
-  });
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
 };
 
 const updatedStatus = async (req, res) => {

@@ -24,6 +24,8 @@ const specificationsRoutes = require("./routes/specifications-routes");
 const adminAPIRoutes= require('./routes/adminRoutes');
 const categoryRoutes = require("./routes/category-routes");
 const customerRoutes = require("./routes/customer-routes");
+const siteSettingRoutes = require("./routes/site-setting-routes");
+const roleRoutes = require("./routes/role-routes");
 
 const corsOptions = {
     origin: "https://react.server55.net", 
@@ -73,6 +75,8 @@ app.use("/api/category/", categoryRoutes);
 app.use("/api/customer/",customerRoutes)
 app.use("/api/brand", brandRoutes);
 app.use("/api/specification", specificationsRoutes);
+app.use("/api/siteSetting", siteSettingRoutes);
+app.use("/api/roles", roleRoutes);
 
 // Add a root route for rendering a view
 app.get("/", (req, res) => {

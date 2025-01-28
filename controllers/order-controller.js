@@ -71,13 +71,11 @@ exports.createOrder = async (req, res) => {
       }
 
       totalPrice += product.price * cartProduct.quantity;
-     const variantDetails =  product.variants.find((i)=>(i._id==cartProduct.variantId))
+
       orderProducts.push({
         productId: cartProduct.productId,
         quantity: cartProduct.quantity,
-        title: `${product?.title?.get('en')} ${variantDetails?.attributeName?.split('-')[0] || ''} - ${cartProduct.subVariant||''}`,
         price: product.price,
-        image:variantDetails?.attributeImage || product.image[0]
       });
     }
     let discountPrice = 0;
@@ -173,127 +171,6 @@ exports.createOrder = async (req, res) => {
     res.status(500).json({ message: 'Error creating order', error: error.message });
   }
 };
-exports.createPreOrder = async (req, res) => {
-  try {
-    const { userId,couponId,productId,variantId,subVariant,quantity } = req.body;
-    
-  
-    const product = await Product.findById(productId.toString());
-    if(!product){
-      res.status(400).json({msg:'Product not found'})
-    }
-
-    // Calculate the total price
-    let totalPrice = 0;
-    let remainingAmount = 0;
-    const orderProducts = [];
- let variantDetails = {}
-  
-   if(variantId){
-    variantDetails = product.variants.find((i)=>i._id.toString() == variantId.toString());
-        orderProducts.push({
-          productId: productId,
-          quantity:quantity,
-          price: variantDetails.preOrderPrice,
-          title: `${product?.title?.get('en')} ${variantDetails?.attributeName?.split('-')[0] || ''} - ${subVariant||''}`,
-          image:variantDetails?.attributeImage || product.image[0]
-        })
-        totalPrice += variantDetails.preOrderPrice * quantity;
-        remainingAmount = variantDetails.price * quantity - totalPrice ;
-      }else{
-        orderProducts.push({
-          productId: productId,
-          quantity:quantity,
-          price: product.preOrderPrice,
-          title: `${product?.title?.get('en')} ${variantDetails?.attributeName?.split('-')[0] || ''} - ${subVariant||''}`,
-          image: product.image[0]
-        })
-        totalPrice += product.preOrderPrice * quantity;
-        remainingAmount = product.price * quantity - totalPrice ;
-      }
-    
-      let user;
-    const existingUser = await User.findOne({ _id:userId });
-
-        if (!existingUser) {
-          let name = req.body.name;
-          let email = req.body.email;
-          let phone = req.body.phone_number;
-         
-            const findemail = await User.findOne({ email });
-            if(findemail){
-             return res.status(401).json({success:false,message:'Email already used'})
-            }
-          
-            // Hash the password
-            const hashedPassword = await bcrypt.hash('123456', 12); 
-            // Create a new user with optional role (default: "user")
-            user = new User({
-                name,
-                guestId:userId,
-                email: email,
-                password: hashedPassword,
-                phone,
-                role: "guest", // Default role is "user"
-            });
-            await user.save();
-          
-          } else{
-            user = existingUser
-          }
-
-            const userObj = await User.findById(user._id); 
-            let shipAddress = {};
-            shipAddress.label = "Ship";
-            shipAddress.street = req.body.street;
-            shipAddress.city = req.body.city;
-            shipAddress.state = req.body.state;
-            shipAddress.country = req.body.country;
-            shipAddress.zipcode = req.body.zipcode; 
-
-            userObj.addresses.push(shipAddress);
-            // Get the newly added address ID
-            const shipAddressId = userObj.addresses[userObj.addresses.length - 1]._id;
-            await userObj.save();
-
-            const userBillObj = await User.findById(user._id); 
-            
-            let billAddress = {};
-            billAddress.label = "Ship";
-            billAddress.street = req.body.bill_street;
-            billAddress.city = req.body.bill_city;
-            billAddress.state = req.body.bill_state;
-            billAddress.country = req.body.bill_country;
-            billAddress.zipcode = req.body.bill_zipcode; 
-
-            userBillObj.addresses.push(billAddress);
-            // Get the newly added address ID
-            const billAddressId = userBillObj.addresses[userBillObj.addresses.length - 1]._id;
-            await userBillObj.save();
-
-            // Create the order
-            const order = new Order({
-                  userId: user._id,
-                  couponId,
-                  shipAddressId,
-                  billAddressId,
-                  products: orderProducts,
-                  totalPrice,
-                  remainingAmount,
-                  status: 'preOrder', // Default status
-            });
-
-            await order.save(); 
-            // Clear the cart after creating the order
-            await Cart.findOneAndDelete({ userId });
-            
-            res.status(200).json({ message: 'preOrder created successfully', success:true });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error creating order', error: error.message });
-  }
-};
 
 // Get orders by user ID
 exports.getOrdersByUser = async (req, res) => {
@@ -301,7 +178,11 @@ exports.getOrdersByUser = async (req, res) => {
     const { userId } = req.body;
 
     // Fetch orders for the user and populate product details
-    const data = await Order.find({ userId: userId.toString() })
+    const data = await Order.find({ userId: userId.toString() }).populate({
+      path: 'products.productId',
+      model: 'Products',
+      select: 'title image price originalPrice stock',
+    });
 
     // Fetch user details to get addresses
     const userDetails = await User.findById(userId);
@@ -392,8 +273,8 @@ exports.index = async (req, res) => {
   
     // Get filtered orders with pagination
     const orders = await Order.find(filter).populate({
-      path: 'shipAddressId', // The field to populate
-      model: 'Address',  // The name of the model to use
+      path: 'userId',   // Populate single category
+      select: 'name _id', // Include only the 'name' and '_id' fields from Category
     })
       .skip(paginationOptions.skip)
       .limit(paginationOptions.limit);
@@ -423,34 +304,6 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     const order = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    if (status === 'shipped') {
-      // Use Promise.all to handle all updates concurrently
-      await Promise.all(
-        order.products.map(async (item) => {
-          const product = await Product.findById(item.productId.toString());
-    
-          if (product) {
-            
-         
-    
-          if (item.variantId) {
-            const variant = product.variants.find((v) => v._id.toString() === item.variantId);
-    
-            if (variant) {
-              if (variant.quantity > 0) {
-                variant.quantity -= 1;
-              }
-            }
-          } else {
-            if (product.stock > 0) {
-              product.stock -= 1;
-            }
-          }
-    
-          await product.save();
-        }
-        })
-      );}
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
     res.status(200).json({ message: 'Order status updated successfully', order });
